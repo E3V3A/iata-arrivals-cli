@@ -2,7 +2,6 @@
 
 [![pypi supported versions][1]][2]
 [![PyPI version][3]][4]
-
 [![Maintenance][5]][6]
 [![GitHub last commit][7]][8]
 [![Average time to resolve an issue][9]][10]
@@ -188,9 +187,9 @@ Feel free to send a PR in case you have some improvements.
 
 
 ![GPLv3 Logo](https://www.gnu.org/graphics/gplv3-88x31.png "I use `GPLv3` because sharing code modifications is more beneficial for the world.")  
+[![GitHub license][21]][22]  
 A license to :sparkling_heart:!
 
-[![GitHub license][21]][22]  
 <sub>I use `GPLv3` because sharing code modifications is more beneficial for the world.</sub>
 
 [21]: https://img.shields.io/github/license/E3V3A/iata-arrivals-cli.svg
