@@ -4,9 +4,9 @@
 #----------------------------------------------------------------------------
 #  Author:      E:V:A
 #  Date:        2018-01-08
-#  Last:        2018-11-28
+#  Last:        2022-01-21
 #  Repo/Bugs:   https://github.com/E3V3A/IataArrivals
-#  Version:     1.0.1   (pyflightdata-0.5.8)
+#  Version:     1.0.2   (pyflightdata-0.8.5)
 #  Codec:       utf_8
 #  License:     GPLv3
 #  Donate?      BTC:    
@@ -22,7 +22,7 @@
 #  Required Installation:
 # 
 #    git clone https://github.com/supercoderz/pyflightdata.git
-#    pip2 install pyflightdata
+#    pip install pyflightdata
 # 
 #  Run with:
 #
@@ -32,11 +32,15 @@
 #
 #   (a)    ./arrivals.py -j 1 CPH | json_pp -f json -t dumper -json_opt pretty,utf8,allow_singlequote
 #                                 | python -m json.tool | pygmentize -g
+#           python -c "from pyflightdata import FlightData as fd; a=fd().get_flights_from_to('OSL','TLV'); print(a);"
 #
-#   (b)  Directly in python3 CLI:
+#   (b)  Directly in python CLI:
 #           from pyflightdata import FlightData as fd
 #           da = fd().get_airport_arrivals("KAL")
 #           print (da)
+#
+#   (c) To update (repo) installed pyflightsdata you may need to do: 
+#       pip install --ignore-requires-python --ignore-installed --force-reinstall -e .
 #
 #  =============================   WARNING!  ================================
 # 
@@ -46,8 +50,8 @@
 #    those sites and/or their API services in case of misuse by multiple
 #    and rapid requests. Please respect the providers of free services!
 # 
-#  * Do not use the METAR from this app for professional use, it's not 
-#    as up-to-date as that provided by other sources/services. 
+#  * Do not use the METAR from this app for professional use, it's probably 
+#    not as up-to-date as that provided by other sources/services. 
 # 
 #----------------------------------------------------------------------------
 # 
@@ -85,6 +89,7 @@
 #       - Python3               -- SELF:  datetime, getopt, json, re, sys
 #       - pyflightdata          -- API:   requests, lxml, beautifulsoup4, pytest, pytest-cov, pytest-repeat, jsonpath-rw, flaky, twine, sphinx, sphinx-autobuild, sphinx_rtd_theme
 #       - flightradar24         -- API:   pytest, requests, python-coveralls, coverage
+#       - "others"              -- ???:   ply, decorator, html5lib, webencodings
 # 
 #  ToDo:    
 # 
@@ -92,20 +97,24 @@
 #       [ ] Investigate how to implement ICAO -- 4 letter airpiort codes
 #       [ ] Fix sorting of JSON response so that time of arrivals/departure are in order
 #       [ ] Fix "-j" CLI flag for debug mode
-#       [ ] Fix tabulation by using .l/rjust instead of all in-string TAB's
+#       [/] Fix tabulation by using {} formatting instead of all in-string TAB's
 #       [ ] Fix color check also for:  xterm-color and xterm-256color etc.
 #       [ ] Add "-a" CLI flag to add API credentials by supplying a registered email and password
 #       [ ] Add "-f" CLI flag for current in-flight plane information given a Flight number or Flight ID. 
 #       [ ] Add "-t" CLI flag for times used for API vs. local airport TZ
 #       [ ] Add alternative source(s) for other airports not available 
 #       [ ] Add gate number to Departures
-#       [ ] Add XML parser and "-m" option for aviationweather METAR
 #       [ ] Add "-r" CLI flag to get Flightradar24 current flights within boundary box, 
 #           given a [lat/lon] (decimal degrees) and radius in km. I.e.:
 #           arrivals -r <lat,lon> <radius[km]> 
 #           See:    1. [MMM-FlightsAbove](https://github.com/E3V3A/MMM-FlightsAbove) 
 #                   2. [flightradar24-client](https://github.com/derhuerst/flightradar24-client)
-# 
+#       [-] Add RealFeel temperature calulation from realfeel.py
+#       [ ] ^^^ We use FeelsLike (from meteocalc) instead as RealFeel is too complicated and poorly documented.
+#           https://github.com/malexer/meteocalc
+#       [ ] 2022-01-20 dependencies:    ply, decorator, html5lib, webencodings, 
+#       
+#       
 #  Dev Notes:  
 #
 #       - Python dictionaries are not ordered, so the key-value pairs may appear in a different order when printed
@@ -117,11 +126,12 @@
 #----------------------------------------------------------------------------
 import datetime, getopt, json, re, sys
 from pyflightdata import FlightData
+from metar import Metar
 
 #------------------------------------------------
 #  Variables
 #------------------------------------------------
-version = "1.0.1"
+version = "1.0.2"
 apicreds = 0
 
 #------------------------------------------------
@@ -129,9 +139,10 @@ apicreds = 0
 #------------------------------------------------
 # Usage:  print (yellow("This is yellow"))
 def color(text, color_code):
-    if sys.platform == "win32" and os.getenv("TERM") != "xterm":    # or xterm-color or xterm-256color
-        return text
-    return '\x1b[%dm%s\x1b[0m' % (color_code, text)
+    # Potential windows issue: see issue #2
+    #if sys.platform == "win32" and os.getenv("TERM") != "xterm":    # or xterm-color or xterm-256color
+    #    return text
+    return '\x1b[{}m{}\x1b[0m'.format(color_code, text)
 
 def red(text): return color(text, 31);
 def green(text): return color(text, 32);
@@ -140,6 +151,7 @@ def yellow(text): return color(text, 33)
 def blue(text): return color(text, 34)
 def purple(text): return color(text, 35)
 def cyan(text): return color(text, 36)
+def gray(text): return color(text, 37);
 
 #------------------------------------------------
 #  Functions
@@ -147,22 +159,22 @@ def cyan(text): return color(text, 36)
 def usage() : 
     print ("\n Usage:  arrivals.py [options] <airport-IATA-code>\n")
     print (" Options:")
-#   print ("        -a <email> <passwd>  -- Use your API credentials by supplying a registered email and password")
-    print ("        -d <airport-iata>    -- Show Departures instead of Arrivals")
-#    print ("        -f <flight/id>       -- Get in-air information (speed,alt,bearing etc) given a certain flight number or id")
-    print ("        -n <n>               -- Only show next <n> number of flights")
-    print ("        -i <airport-iata>    -- Show information about an Airport given its IATA code [Country, Lat/Lon, TZ]")
+#    print ("        -a <email> <passwd>  -- Use your API credentials by supplying a registered email and password")
+    print ("        -d <airport-iata>    -- Show Departures instead of Arrivals (default)")
+    print ("        -n <n>               -- Only show <n> number of flights")
+    print ("        -i <airport-iata>    -- Show detailed information about an airport given its IATA code")
     print ("        -j <1,2>             -- Enable debug mode at level 1 or 2 to print the full JSON response")
     print ("        -l <country-name>    -- List all available airport IATA codes for a country given by <country-name>")
-#    print ("        -m <airport-iata>    -- Get last hour's METAR data for an airport given by its IATA <airport-code>")
-#    print ("                                This option is getting raw METAR info from:  aviationweather.gov")
+    print ("        -m <airport-iata>    -- Get last hour's METAR data for an airport given by its IATA <airport-code>")
+#    print ("                                (This option is getting raw METAR info from:  aviationweather.gov )")
+#    print ("        -f <flight/id>       -- Get in-air information (speed,alt,bearing etc) given a certain flight number or id")
 #    print ("        -r <lat,lon> <radius> -- Show flights/airplanes within the given radius [km] of a decimal lat/lon location.")
 #    print ("        -t                   -- Show arrival/departure times in the local timezone (TZ) of the airport")
-    print ("        -c                   -- Display Copyright License and maintenance URL.")
-    print ("        -v                   -- Print program Version")
 #    print ("        -w                   -- Show the weather for the Airport given by its <iata> code")
+    print ("        -x <iata-1> <iata-2> -- Show direct fligths between 2 airports given by their <iata> codes")
+    print ("        -c                   -- Print Copyright License and maintenance URL.")
+    print ("        -v                   -- Print program Version")
     print ("        -h, --help           -- Print this help")
-#    print ("\n NOTE:")
     print ("\n")
     print (red(" --- IMPORTANT! -----------------------------------------------"))
     print ("   \u2022 All times shown are in the timezone of your computer!")
@@ -178,6 +190,16 @@ def hs(apiTime):
         return tf
     else :
         return "-"
+
+# Return MM-DD HH:MM:SS from Unix Time Epoch
+def hd(apiTime):
+    if apiTime != "None" :      # isinstance(apiTime, int) :
+        tt = datetime.datetime.fromtimestamp(int(apiTime))
+        tf = tt.strftime('%Y-%m-%d %H:%M')
+        return tf
+    else :
+        return "-"
+
 
 def tz(apiTZ): 
         ##tt = datetime.datetime.fromtimestamp(int(apiTZ))
@@ -214,7 +236,7 @@ def airerr2():
     sys.exit()
 
 def copyright():
-    print ("\nProgram License:  GPLv3\nMaintenance URL:  https://github.com/E3V3A/IataArrivals") 
+    print ("\nProgram License:  GPLv3\nMaintenance URL:  https://github.com/E3V3A/iata-arrivals-cli") 
     sys.exit()
 
 #------------------------------------------------
@@ -223,14 +245,16 @@ def copyright():
 #def main():
 
 badbug = False   # Enable to check CLI arguments
-debug = 0      
+#badbug = True   # Enable to check CLI arguments
+debug = 0
 query = 1
 airport = ''
+airport2 = ''
 country = ''
 nmax = 0
 
 try:
-    opts, args = getopt.getopt(sys.argv[1:], ":chvd:i:j:l:m:n:", ["help", "version"])
+    opts, args = getopt.getopt(sys.argv[1:], ":chvd:i:j:l:m:n:x:", ["help", "version"])
 except getopt.GetoptError :
     #print str(err)
     usage()
@@ -251,16 +275,18 @@ else :
             print ("arg: ", arg)
         if opt in ("-h", "--help"): usage(); sys.exit();
         elif opt in ("-v", "--version"): print ("Version: ", version); sys.exit();
-        elif opt == "-c": copyright();                          # Show Copyright info
-        elif opt == "-d": query = 2; airport = arg;             # Show Departures from <iata>
-        elif opt == "-l": query = 3; country = arg;             # Show list of <iata> codes from <country>
-#        elif opt == "-m": query = 5; airport = arg;             # Show airport INFO from <iata>
-        elif opt == "-i": query = 4; airport = arg;             # Show airport INFO from <iata>
-        elif opt == "-j": debug = int(arg);                     # FIX:  airport = args[0]; country = args[0];
         #elif opt == "-a":                                      # Use API credentials
         #    apicreds = 1; apiuser = args[0]; apipass = args[1];
+        elif opt == "-c": copyright();                          # Show Copyright info
+        elif opt == "-d": query = 2; airport = arg;             # Show Departures from <iata>
+        elif opt == "-i": query = 4; airport = arg;             # Show airport INFO from <iata>
+        elif opt == "-j": debug = int(arg);                     # FIX:  airport = args[0]; country = args[0];
+        elif opt == "-l": query = 3; country = arg;             # Show list of <iata> codes from <country>
+        elif opt == "-m": query = 5; airport = arg.upper();     # Show last hour's METAR data for an airport given by <airport-code>
         elif opt == "-n": nmax = int(arg); #airport = args[0]                     # FIX:  Maximum number of output items/pages
         #elif opt == "-t": loctz = True;                        # Show all results in local airport TimeZone
+        elif opt == "-x":                                       # Show flights between 2 airports <iata-1> <iata-2>
+           query = 6; airport = arg; airport2 = args[0].upper();
 
 if not airport and not country : airport = args[0];
 
@@ -268,9 +294,9 @@ if not airport and not country : airport = args[0];
 # Fix for some ambigous country names ("United" for UK,US,USA,UAE)
 if not country == '' :
     if country == "US" or country == "USA" :
-         country = "United States"
+        country = "United States"
     elif country == "UK" :
-         country = "United Kingdom"
+        country = "United Kingdom"
     elif country == "UAE" :
         country = "United Arab Emirates"
     elif country == "United" :
@@ -278,6 +304,7 @@ if not country == '' :
 
 if badbug :
     print ("airport: ", airport)
+    print ("airport2: ", airport2)
     print ("country: ", country)
     print ("debug: ", debug)
     print ("query: ", query)
@@ -329,6 +356,21 @@ elif query == 4 :
     except TypeError :
         typerr(); iataerr();
     if not alist or not blist : iataerr();
+elif query == 5 : 
+    try: 
+        blist = api.get_airport_weather(airport);     # Return: 
+    except AttributeError :
+        iataerr();
+    except TypeError :
+        typerr(); iataerr();
+    if not blist : iataerr();
+elif query == 6 : 
+    try: 
+        alist = api.get_flights_from_to(airport, airport2);  # Return: a JSON dictionary of xxxxx
+    except AttributeError :
+        Print('Attribute exception'); #airerr();
+    if not alist : 
+        print('empty list - no conncting flights?'); airerr();
 
 
 if apicreds == 1 : api.logout();
@@ -393,7 +435,8 @@ if query == 1 :
         if re.match( r'[Ll]anded', status ) : status = green(status);
         airline = airlinN[:24].ljust(24,' ')
 
-        FLine = ("%s\t %s\t %s\t %s\t %s\t %s\t %s"% (callsig, flight1, origin, hs(timeS), hs(timeE), airline, status) )
+        #FLine = ("%s\t %s\t %s\t %s\t %s\t %s\t %s"% (callsig, flight1, origin, hs(timeS), hs(timeE), airline, status) )
+        FLine = ("{}\t {}\t {}\t {}\t {}\t {}\t {}".format(callsig, flight1, origin, hs(timeS), hs(timeE), airline, status) )
         print (FLine)
 
 #------------------------------------------------
@@ -577,7 +620,7 @@ if query == 4 :
         print ("METAR:\t%s" % (green(metar)) )
         print ("Nav Category:\t\t%s" % (iflight) )
         print ("Sky Condition:\t\t%s" % (skycond) )
-        print ("Visibility [%s]:\t%s" % (visi_unit, skyvisi) )
+        print ('Visibility [{}]:\t{}'.format(visi_unit, round(skyvisi,1)) )  # Need to truncate decimals 
         print ("Wind:\t\t\t%s [km/h] %s (%s\xb0)" % (yellow(windspd), winddir, winddeg) )
         print ("Temperature [\xb0C]:\t%s" % (tempc) )
         print ("Dew Point [\xb0C]:\t\t%s" % (tempd) )
@@ -587,22 +630,102 @@ if query == 4 :
 #------------------------------------------------
 #  METAR  "-m <airport-iata>"
 #------------------------------------------------
-# if query == 5 : 
+if query == 5 : 
 
-#     HLine = ("IATA\t %s"% ("Airport Name".ljust(50,' ')) )
-#     Hleng = len(HLine) + 4
-
-#     print ("\nMETAR INFO for %s" % (airport) )
-#     print ("-"*Hleng)
-#     print (HLine)
-#     print ("-"*Hleng)
+    metar = blist['metar']
+    obs = Metar.Metar(metar)
     
-#     for aL in alist:
-#         iata = aL['iata']
-#         name = aL['name'][:50].ljust(50,' ')
+    #HLine = ('{:8>} {}'.format(airport, '(Work in progress!)') )
+    Hleng = 80 # len(HLine)
 
-#         FLine = ("%s\t %s"% (iata, name) )
-#         print (FLine)
+    print ('\nMETAR INFO for {}'.format(yellow(airport)) )
+    print ("-"*Hleng)
+    #print (HLine)
+    #print ("-"*Hleng)
+    
+    
+    #for k, v in obs:
+    #   print('{:20>} {}'.format(k,v))
+    print(obs.string())
+
+#------------------------------------------------
+#  Direct flights from A to B
+#------------------------------------------------
+# python ./arrivals.py -x OSL IST
+#------------------------------------------------
+# We don't use ['flight'] here.
+#   get_flights_from_to()
+#   self._fr24.get_airline_flight_data(url, by_airports=True)
+#   https://api.flightradar24.com/common/v1/search.json?query=default&origin=OSL&destination=AGP
+#------------------------------------------------
+
+if query == 6 : 
+
+    headers = ('ID', 'Flight', 'Scheduled', 'ETD', 'Airline', 'Aircraft', 'Status')
+    HLine   = ('{:<8}  {:<8} {:<16}  {:<5}  {:<24} {:<20} {:<19}'.format(*headers) ) # * = unpack the tuple
+    Hleng = len(HLine) #+ 6*4  # also count 4-space tab lengths 
+
+    print ('\nNOTE: All times shown are in the timezone of the script!\n')
+    print ('DEPARTURES from {} to {}'.format(yellow(airport), yellow(airport2)) )
+    print ('-'*Hleng)
+    print (HLine)
+    print ('-'*Hleng)
+
+    for aL in alist:
+        
+        callsig = aL['identification']['callsign']                      # LOT779
+        flight1 = aL['identification']['number']['default']             # LO779
+        
+        if ( aL['aircraft'] == 'None' ):
+            aircraft = "---"
+        else:
+            aircraft = aL['aircraft']['model']['text']
+        
+        if aL['airport']['destination'] == "None" :                     # Some destinations doesn't have an IATA code or is unknown
+            goingto = "---"
+        else :
+            goingto = aL['airport']['destination']['code']['iata']      # WAW
+
+        timeS   = aL['time']['scheduled']['departure']                  # 1515331200 
+        timeE   = aL['time']['estimated']['departure']                  # 1515330560 
+        #timeR   = aL['flight']['time']['real']['departure']            # None 
+        #timeO   = aL['flight']['time']['other']['eta']                 # 1515330560 
+        
+        if aL['airline'] == "None" :
+            airlinN = "---"
+        else :
+            airlinN = aL['airline']['name']                             # Nordica
+        #if aL['airline']['name'] = 'None' :                            # If we can't find airline name, maybe ICAO name? 
+            #airlinI = aL['airline']['code']['icao']                    # EST
+        
+        status  = aL['status']['text']                                  # "scheduled"
+        
+        #TZO = aL['flight']['airport']['destination']['timezone']['offset'] # 7200 [seconds]
+        
+        #--------------------------------------------------
+        # Truncate items that are often too long
+        #--------------------------------------------------
+        airline = airlinN[:24]                                          # Truncate Airline name
+        aircraft = aircraft[:20]                                        # truncate
+        status = status[:19]                                            # Truncate
+        
+        #--------------------------------------------------
+        # Colorize Sttatus
+        #--------------------------------------------------
+        # WARNING: Do not truncate colored status, as it will break ansi coloring!
+        if status == "Scheduled" : status = "-"
+        #if status == "Estimated" : status = "-"
+        #if "Estimated dep" in status : status = "-"
+        if re.match( r'[Dd]elayed', status ) : status = yellow(status);
+        if re.match( r'[Cc]anceled', status ) : status = red(status);
+        if re.match( r'[Ll]anded', status ) : status = green(status);
+        #re.sub( r'([Dd]elayed)', yellow(group(1)), status, 1)
+
+        #headers = ('ID', 'Flight', 'Scheduled', 'ETD', 'Airline', 'Aircraft', 'Status')
+        FLine   = ('{:<8}  {:<8} {:<16}  {:<5}  {:<24} {:<20} {:<19}'.format(callsig, flight1, hd(timeS), hs(timeE), airline, aircraft, status) ) # changed from hs() to hd()
+
+        print (FLine)
+
 
 #------------------------------------------------
 #  END

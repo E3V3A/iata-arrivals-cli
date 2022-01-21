@@ -1,1 +1,11 @@
+v1.0.1, 2022-01-21 -- New Release and bug fixes:
+	
+* Fixed maintenance URL in '-c' switch. Fixed #2
+* Fixed truncation of decimals in the airport (METAR) Visibility field
+* Added '-m' switch to get and parse airport METAR info
+* Added '-x' switch to show direct fligths between 2 airports
+* Updated setup.py to bump the supported Python version to Python 3.10
+* Updated REDME.md by fixing typos and updated the dependencies and new switches. Fixed #4
+
+
 v1.0.1, 2018-11-28 -- Initial release.

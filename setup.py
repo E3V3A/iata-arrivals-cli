@@ -18,7 +18,7 @@ def readme():
 
 setup(
     name             = 'iata-arrivals-cli',
-    version          = '1.0.1',
+    version          = '1.0.2',
     author           = 'E:V:A',
     author_email     = 'xdae3v3a@gmail.com',
     description      = 'Get airport arrivals, departures, details and METAR weather info from CLI.',
@@ -45,7 +45,7 @@ setup(
         'Development Status :: 5 - Production/Stable',
         'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.10',
         'Topic :: Internet',
         'Topic :: Utilities',
     ],

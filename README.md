@@ -25,7 +25,7 @@ A simple tool to show dapartures, arrivals and various airport information given
 
 | STATUS: | Version | Date | Maintained? |
 |:------- |:------- |:---- |:----------- |
-| Working | `1.0.1` | 2018-11-28 | YES |
+| Working | `1.0.2` | 2022-01-21 | YES |
 
 
 **Example Output:**
@@ -50,21 +50,22 @@ the tools often depend on various forms of web scraping and API hacking.
 airport [IATA](https://en.wikipedia.org/wiki/IATA_airport_code) code. However, it can also show 
 additional airport and weather information. These include items such as:
 
-- The official *IATA* (full) *Name* of the airport
-- The [ICAO](https://en.wikipedia.org/wiki/ICAO_airport_code) airport code
-- The *`Lat/Lon`* GPS coordinates with map `URL`
-- The Airport Web Site *`URL`*
+- The official *IATA* full/long *Name* of the airport
+- The IATA and [ICAO](https://en.wikipedia.org/wiki/ICAO_airport_code) airport codes
+- The *`Lat/Lon`* GPS coordinates with *map* `URL`
+- The Airport *website* `URL`
 - The current weather info such as:  
   *`Nav, Sky, Visibility, Temperature, Pressure, Wind Speed/Direction, Humidity`* etc.
 - The Airport's current *`METAR`* info
-- The ICAO code and IATA names of most officially listed airports for a given country name. 
+- The ICAO code and IATA names of most officially listed airports for a given country name.
+- The most recent and scheduled *non-stop* flights between 2 given airports.
 
 
 **Q:** *What does it **not** do?*
 
 - show detailed flight info
 - show aircraft or carrier info
-- itshow aiport info for airports not connected to the international  
+- show aiport info for airports not connected to the international  
   air traffic controller (ATC) network or internet.
 - it may not show the very latest METAR data (depending on Airport availability)
 
@@ -85,9 +86,9 @@ This package depend on the API library [pyflightdata](https://github.com/superco
 which is used to collect all the relevant data from the `FlightRadar24` site. However, that library 
 in turn depend on: 
 
-- *`beautifulsoup4, jsonpath-rw, lxml, metar, requests`*
+- *`beautifulsoup4, jsonpath-rw, lxml, metar, requests, ply, decorator, html5lib, webencodings`*
 
-It is highly recommended to install *`lxml`* **before**, you install *pyflightdata*, 
+It is also recommended to install *`lxml`* **before**, you install *pyflightdata*, 
 because that dependency often require extra source compiling, which is prone to 
 additional dependency errors. 
 
@@ -126,12 +127,14 @@ $ arrivals -h
  Usage:  arrivals [options] <airport-IATA-code>
 
  Options:
-        -d <airport-iata>    -- Show Departures instead of Arrivals
+        -d <airport-iata>    -- Show Departures instead of Arrivals (default)
         -n <n>               -- Only show next <n> number of flights
         -i <airport-iata>    -- Show information about an Airport given its IATA code [Country, Lat/Lon, TZ]
         -j <1,2>             -- Enable debug mode at level 1 or 2 to print the full JSON response
         -l <country-name>    -- List all available airport IATA codes for a country given by <country-name>
-        -c                   -- Display Copyright License and maintenance URL.
+        -m <airport-iata>    -- Get last hour's METAR data for an airport given by its IATA <airport-code>
+        -x <iata-1> <iata-2> -- Show direct fligths between 2 airports given by their <iata> codes
+        -c                   -- Print Copyright License and maintenance URL.
         -v                   -- Print program Version
         -h, --help           -- Print this help
 
