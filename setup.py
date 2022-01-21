@@ -29,7 +29,7 @@ setup(
     license='LICENSE.txt',
     url = 'https://github.com/e3v3a/iata-arrivals-cli/',
     packages = find_packages(),
-    scripts=['arrivals'],
+    scripts=['arrivals.py'],
     keywords = 'airport flights arrivals departures iata icao metar pip package cli',
     install_requires=[
         'lxml',
